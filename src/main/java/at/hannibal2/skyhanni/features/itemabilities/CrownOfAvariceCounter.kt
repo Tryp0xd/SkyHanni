@@ -75,7 +75,7 @@ object CrownOfAvariceCounter {
     fun onSecondPassed(event: SecondPassedEvent) {
         if (!isEnabled()) return
         if (!isWearingCrown) return
-        //No need to update if paused, we'll unpause with onInventoryUpdated
+        // No need to update if paused, we'll unpause with onInventoryUpdated
         if (sessionUptime.isPaused()) return
         update()
     }
@@ -112,7 +112,7 @@ object CrownOfAvariceCounter {
     }
 
     private fun update() {
-        if (sessionUptime.getLapTime()?.let{it > config.afkTimeout.seconds} != false) {
+        if (sessionUptime.getLapTime()?.let{ it > config.afkTimeout.seconds } != false) {
             sessionUptime.pause(true)
         }
         display = buildDisplay()
