@@ -45,8 +45,8 @@ object CrownOfAvariceCounter {
     private val internalName = "CROWN_OF_AVARICE".toInternalName()
 
     private var display: List<Renderable> = emptyList()
-    private val MAX_AVARICE_COINS = 1.billion
-    private val MAX_AFK_TIME = 2.minutes
+    private const val MAX_AVARICE_COINS: Int = 1_000_000_000
+    private val maxAfkTime = config.afkTimeout
     private var inventoryOpen = false
     private val isWearingCrown by RecalculatingValue(1.seconds) {
         InventoryUtils.getHelmet()?.getInternalNameOrNull() == internalName
@@ -197,7 +197,7 @@ object CrownOfAvariceCounter {
         return if (timeInHours > 0) coinsEarned / timeInHours else 0.0
     }
 
-    private fun isSessionAFK() = lastCoinUpdate?.passedSince()?.let { it > MAX_AFK_TIME || isPaused } ?: false
+    private fun isSessionAFK() = lastCoinUpdate?.passedSince()?.let { it > maxAfkTime.seconds || isPaused } ?: false
 
     private fun calculateTimeUntilMax(): String {
         val coinsPerHour = calculateCoinsPerHour()
