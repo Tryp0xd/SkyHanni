@@ -21,6 +21,7 @@ import at.hannibal2.skyhanni.utils.RenderUtils.renderRenderables
 import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SkyBlockItemModifierUtils.getCoinsOfAvarice
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
+import at.hannibal2.skyhanni.utils.Stopwatch
 import at.hannibal2.skyhanni.utils.TimeUtils.format
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addHorizontalSpacer
 import at.hannibal2.skyhanni.utils.collection.RenderableCollectionUtils.addItemStack
@@ -46,7 +47,6 @@ object CrownOfAvariceCounter {
 
     private var display: List<Renderable> = emptyList()
     private const val MAX_AVARICE_COINS: Int = 1_000_000_000
-    private val maxAfkTime = config.afkTimeout
     private var inventoryOpen = false
     private val isWearingCrown by RecalculatingValue(1.seconds) {
         InventoryUtils.getHelmet()?.getInternalNameOrNull() == internalName
@@ -54,10 +54,8 @@ object CrownOfAvariceCounter {
 
     private var count: Long? = null
     private var coinsEarned: Long = 0L
-    private var sessionUptime: Duration = 0.seconds
-    private var lastCoinUpdate: SimpleTimeMark? = null
-    private var isPaused: Boolean = false
-    private val isSessionActive get(): Boolean = sessionUptime < config.sessionActiveTime.seconds
+    private var sessionUptime: Stopwatch = Stopwatch()
+    private val isSessionActive get(): Boolean = sessionUptime.getDuration() < config.sessionActiveTime.seconds
     private var coinsDifference: Long? = null
 
     init {
@@ -84,7 +82,6 @@ object CrownOfAvariceCounter {
     fun onSecondPassed(event: SecondPassedEvent) {
         if (!isEnabled()) return
         if (!isWearingCrown) return
-        if (!isSessionAFK()) sessionUptime += 1.seconds
         update()
     }
 
@@ -105,8 +102,8 @@ object CrownOfAvariceCounter {
             return
         }
 
-        isPaused = false
-        lastCoinUpdate = SimpleTimeMark.now()
+        sessionUptime.start()
+        sessionUptime.lap()
         coinsEarned += coinsDifference ?: 0
         count = coins
 
@@ -120,6 +117,12 @@ object CrownOfAvariceCounter {
     }
 
     private fun update() {
+        //No need to update if paused, we'll unpause with onInventoryUpdated
+        if (sessionUptime.isPaused()) return
+
+        if (sessionUptime.getLapTime()?.let{it > config.afkTimeout.seconds} != false) {
+            sessionUptime.pause(true)
+        }
         display = buildDisplay()
     }
 
@@ -150,14 +153,14 @@ object CrownOfAvariceCounter {
                 "§aCoins Per Hour: §6${
                     if (isSessionActive) "Calculating..."
                     else if (config.shortFormatCPH) coinsPerHour.shortFormat() else coinsPerHour.addSeparators()
-                } " + if (isSessionAFK()) "§c(PAUSED)" else "",
+                } " + if (sessionUptime.isPaused()) "§c(PAUSED)" else "",
             )
         }
         lines[CrownOfAvariceLines.TIMEUNTILMAX] = Renderable.horizontal {
             val timeUntilMax = calculateTimeUntilMax()
             addString(
                 "§aTime until Max: §6${if (isSessionActive) "Calculating..." else timeUntilMax} " +
-                    if (isSessionAFK()) "§c(PAUSED)" else "",
+                    if (sessionUptime.isPaused()) "§c(PAUSED)" else "",
             )
         }
 
@@ -170,7 +173,7 @@ object CrownOfAvariceCounter {
         }
 
         lines[CrownOfAvariceLines.SESSIONTIME] = Renderable.horizontal {
-            addString("§aSession Time: §6${sessionUptime.format()}")
+            addString("§aSession Time: §6${sessionUptime.getDuration().format()}")
         }
 
         return fmtDisplay(lines)
@@ -180,24 +183,21 @@ object CrownOfAvariceCounter {
     private fun isEnabled() = SkyBlockUtils.inSkyBlock && config.enable
 
     private fun reset() {
-        isPaused = false
         coinsEarned = 0L
-        sessionUptime = 0.seconds
-        lastCoinUpdate = SimpleTimeMark.now()
+        sessionUptime = Stopwatch()
         coinsDifference = 0L
     }
 
     private fun pauseSession() {
-        isPaused = true
+        sessionUptime.pause()
     }
 
-
     private fun calculateCoinsPerHour(): Double {
-        val timeInHours = sessionUptime.inPartialHours
+        val timeInHours = sessionUptime.getDuration().inPartialHours
         return if (timeInHours > 0) coinsEarned / timeInHours else 0.0
     }
 
-    private fun isSessionAFK() = lastCoinUpdate?.passedSince()?.let { it > maxAfkTime.seconds || isPaused } ?: false
+    //private fun isSessionAFK() = sessionUptime.getLapTime()?.let {it > maxAfkTime.seconds} ?: true
 
     private fun calculateTimeUntilMax(): String {
         val coinsPerHour = calculateCoinsPerHour()
