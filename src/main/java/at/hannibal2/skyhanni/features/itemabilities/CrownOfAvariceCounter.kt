@@ -68,7 +68,7 @@ object CrownOfAvariceCounter {
     }
 
     fun renderDisplay(pos: Position) {
-        val invCurrentlyOpen = Minecraft.getMinecraft().currentScreen?.let { it is GuiInventory || it is GuiChest } ?: false
+        val invCurrentlyOpen = InventoryUtils.inAnyInventory()
         if (inventoryOpen != invCurrentlyOpen) {
             inventoryOpen = invCurrentlyOpen
             update()
@@ -82,6 +82,8 @@ object CrownOfAvariceCounter {
     fun onSecondPassed(event: SecondPassedEvent) {
         if (!isEnabled()) return
         if (!isWearingCrown) return
+        //No need to update if paused, we'll unpause with onInventoryUpdated
+        if (sessionUptime.isPaused()) return
         update()
     }
 
@@ -102,8 +104,8 @@ object CrownOfAvariceCounter {
             return
         }
 
-        sessionUptime.start()
-        sessionUptime.lap()
+        sessionUptime.start() // does nothing if already unpaused
+        sessionUptime.lap() // mark last added coins time for afk timeout
         coinsEarned += coinsDifference ?: 0
         count = coins
 
@@ -117,9 +119,6 @@ object CrownOfAvariceCounter {
     }
 
     private fun update() {
-        //No need to update if paused, we'll unpause with onInventoryUpdated
-        if (sessionUptime.isPaused()) return
-
         if (sessionUptime.getLapTime()?.let{it > config.afkTimeout.seconds} != false) {
             sessionUptime.pause(true)
         }
@@ -186,6 +185,7 @@ object CrownOfAvariceCounter {
         coinsEarned = 0L
         sessionUptime = Stopwatch()
         coinsDifference = 0L
+        update()
     }
 
     private fun pauseSession() {
@@ -196,8 +196,6 @@ object CrownOfAvariceCounter {
         val timeInHours = sessionUptime.getDuration().inPartialHours
         return if (timeInHours > 0) coinsEarned / timeInHours else 0.0
     }
-
-    //private fun isSessionAFK() = sessionUptime.getLapTime()?.let {it > maxAfkTime.seconds} ?: true
 
     private fun calculateTimeUntilMax(): String {
         val coinsPerHour = calculateCoinsPerHour()
