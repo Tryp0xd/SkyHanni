@@ -13,12 +13,10 @@ import at.hannibal2.skyhanni.utils.ItemUtils.getInternalNameOrNull
 import at.hannibal2.skyhanni.utils.NeuInternalName.Companion.toInternalName
 import at.hannibal2.skyhanni.utils.NeuItems.getItemStack
 import at.hannibal2.skyhanni.utils.NumberUtil.addSeparators
-import at.hannibal2.skyhanni.utils.NumberUtil.billion
 import at.hannibal2.skyhanni.utils.NumberUtil.shortFormat
 import at.hannibal2.skyhanni.utils.RecalculatingValue
 import at.hannibal2.skyhanni.utils.RenderDisplayHelper
 import at.hannibal2.skyhanni.utils.RenderUtils.renderRenderables
-import at.hannibal2.skyhanni.utils.SimpleTimeMark
 import at.hannibal2.skyhanni.utils.SkyBlockItemModifierUtils.getCoinsOfAvarice
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import at.hannibal2.skyhanni.utils.Stopwatch
@@ -30,12 +28,7 @@ import at.hannibal2.skyhanni.utils.inPartialHours
 import at.hannibal2.skyhanni.utils.renderables.Renderable
 import at.hannibal2.skyhanni.utils.renderables.addLine
 import at.hannibal2.skyhanni.utils.renderables.container.HorizontalContainerRenderable.Companion.horizontal
-import net.minecraft.client.Minecraft
-import net.minecraft.client.gui.inventory.GuiChest
-import net.minecraft.client.gui.inventory.GuiInventory
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 @SkyHanniModule
@@ -52,7 +45,7 @@ object CrownOfAvariceCounter {
         InventoryUtils.getHelmet()?.getInternalNameOrNull() == internalName
     }
 
-    private var count: Long? = null
+    private var totalCoins: Long? = null
     private var coinsEarned: Long = 0L
     private var sessionUptime: Stopwatch = Stopwatch()
     private val isSessionActive get(): Boolean = sessionUptime.getDuration() < config.sessionActiveTime.seconds
@@ -93,21 +86,21 @@ object CrownOfAvariceCounter {
         val item = event.itemStack
         if (item.getInternalNameOrNull() != internalName) return
         val coins = item.getCoinsOfAvarice() ?: return
-        if (count == null) count = coins
-        coinsDifference = coins - (count ?: 0)
+        if (totalCoins == null) totalCoins = coins
+        coinsDifference = coins - (totalCoins ?: 0)
 
         if (coinsDifference == 0L) return
 
         if ((coinsDifference ?: 0) < 0) {
             reset()
-            count = coins
+            totalCoins = coins
             return
         }
 
         sessionUptime.start() // does nothing if already unpaused
         sessionUptime.lap() // mark last added coins time for afk timeout
         coinsEarned += coinsDifference ?: 0
-        count = coins
+        totalCoins = coins
 
         update()
     }
@@ -115,7 +108,7 @@ object CrownOfAvariceCounter {
     @HandleEvent
     fun onIslandChange(event: IslandChangeEvent) {
         if (config.resetOnWorldChange) reset()
-        count = InventoryUtils.getHelmet()?.getCoinsOfAvarice()
+        totalCoins = InventoryUtils.getHelmet()?.getCoinsOfAvarice()
     }
 
     private fun update() {
@@ -129,7 +122,7 @@ object CrownOfAvariceCounter {
         val newList = mutableListOf<Renderable>()
         newList.addLine {
             addItemStack(internalName.getItemStack())
-            addString("§6" + if (config.shortFormat) count?.shortFormat() else count?.addSeparators())
+            addString("§6" + if (config.shortFormat) totalCoins?.shortFormat() else totalCoins?.addSeparators())
         }
         newList.addAll(config.text.mapNotNull { lines[it] })
 
@@ -200,7 +193,7 @@ object CrownOfAvariceCounter {
     private fun calculateTimeUntilMax(): String {
         val coinsPerHour = calculateCoinsPerHour()
         if (coinsPerHour == 0.0) return "Forever..."
-        val timeUntilMax = ((MAX_AVARICE_COINS - (count ?: 0)) / coinsPerHour).hours
+        val timeUntilMax = ((MAX_AVARICE_COINS - (totalCoins ?: 0)) / coinsPerHour).hours
         return timeUntilMax.format()
     }
 
